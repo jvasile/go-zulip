@@ -13,9 +13,9 @@ type EventEnvelope struct {
 }
 
 type eventPeeker struct {
-	Type EventType `json:"type"`
+	Type string `json:"type"`
 	ID   int64     `json:"id"`
-	Op   *EventOp  `json:"op,omitempty"`
+	Op   *string  `json:"op,omitempty"`
 }
 
 func decodeAndWrap[T Event](event *EventEnvelope, data []byte) error {
@@ -38,9 +38,10 @@ func (e *EventEnvelope) UnmarshalJSON(data []byte) error {
 	var err error
 	var op EventOp
 	if peeker.Op != nil {
-		op = *peeker.Op
+		op = EventOp(*peeker.Op)
 	}
-	switch peeker.Type {
+	eventType := EventType(peeker.Type)
+	switch eventType {
 	case EventTypeAlertWords:
 		err = decodeAndWrap[AlertWordsEvent](e, data)
 	case EventTypeAttachment:
@@ -304,16 +305,16 @@ func (e *EventEnvelope) UnmarshalJSON(data []byte) error {
 		err = decodeAndWrap[UserTopicEvent](e, data)
 	case EventTypeWebReloadClient:
 		err = decodeAndWrap[WebReloadClientEvent](e, data)
-	case EventTypeUnknown, EventTypeInvalid: // these should never appear and we can treat them as unknown
-		fallthrough
+	case EventTypeUnknown, EventTypeInvalid:
 	default:
-		goto unknownEventError
+		e.Event = unknownEvent(data)
+		return nil
 	}
 
 	if err != nil {
 		e.Event = &EventUnmarshalingError{
 			event: event{
-				Type: peeker.Type,
+				Type: eventType,
 				ID:   peeker.ID,
 			},
 			Data: data,
@@ -322,14 +323,20 @@ func (e *EventEnvelope) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 
+
 unknownEventError:
 	e.Event = &EventUnmarshalingError{
-		event: event{
-			Type: peeker.Type,
-			ID:   peeker.ID,
-		},
-		Data: data,
-		Err:  fmt.Errorf("unknown event type %s with op %v", peeker.Type, peeker.Op),
+		event: event{Type: eventType, ID: peeker.ID},
+		Data:  data,
+		Err:   fmt.Errorf("unknown event type %s with op %v", peeker.Type, peeker.Op),
 	}
 	return nil
+}
+
+func unknownEvent(data []byte) Event {
+	unknown := &Unknown{}
+	if err := unknown.UnmarshalJSON(data); err != nil {
+		return &EventUnmarshalingError{Data: data, Err: err}
+	}
+	return unknown
 }

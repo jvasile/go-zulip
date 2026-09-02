@@ -28,6 +28,44 @@ func Test_Unmarshal_HeartbeatEvent(t *testing.T) {
 	require.Equal(t, events.EventTypeHeartbeat, event.GetType())
 }
 
+func Test_Unmarshal_UnknownEvent(t *testing.T) {
+	data := []byte(`{
+		"result": "success",
+		"msg": "",
+		"events": [{
+			"id": 42,
+			"type": "recent",
+			"op": "update",
+			"messages": [123],
+			"payload": {"value": "preserved"}
+		}]
+	}`)
+
+	var resp realtimeevents.GetEventsResponse
+	err := json.Unmarshal(data, &resp)
+
+	require.NoError(t, err)
+	require.Len(t, resp.Events, 1)
+
+	event, ok := resp.Events[0].(*events.Unknown)
+	require.True(t, ok, "expected *events.Unknown, got %T", resp.Events[0])
+	require.Equal(t, int64(42), event.GetID())
+	require.Equal(t, events.EventTypeUnknown, event.GetType())
+	op, ok := event.GetOp()
+	require.True(t, ok)
+	require.Equal(t, events.EventOp("unknown"), op)
+
+	var raw struct {
+		Type    string `json:"type"`
+		Payload struct {
+			Value string `json:"value"`
+		} `json:"payload"`
+	}
+	require.NoError(t, json.Unmarshal(event.Data, &raw))
+	require.Equal(t, "recent", raw.Type)
+	require.Equal(t, "preserved", raw.Payload.Value)
+}
+
 func Test_Unmarshal_ChannelUpdateEvent_GroupSettingValueID(t *testing.T) {
 	data := []byte(`{
 		"result": "success",
