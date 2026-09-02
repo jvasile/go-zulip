@@ -263,10 +263,16 @@ const (
 	HomeViewRecentTopics HomeView = "recent_topics"
 	HomeViewInbox        HomeView = "inbox"
 	HomeViewAllMessages  HomeView = "all_messages"
+	HomeViewRecent       HomeView = "recent"
 )
 
 func (e *HomeView) UnmarshalJSON(data []byte) error {
-	allowedHomeViewValues := []HomeView{HomeViewRecentTopics, HomeViewInbox, HomeViewAllMessages}
+	allowedHomeViewValues := []HomeView{
+		HomeViewRecentTopics,
+		HomeViewInbox,
+		HomeViewAllMessages,
+		HomeViewRecent,
+	}
 
 	return enum.UnmarshalString(data, e, allowedHomeViewValues)
 }
