@@ -1,6 +1,8 @@
 // Package events provides types and interfaces for Zulip real-time events.
 package events
 
+import "encoding/json"
+
 // Event is the interface that all Zulip events implement.
 // Use type assertion or GetType() to determine the specific event type and handle accordingly.
 type Event interface {
@@ -40,6 +42,27 @@ type EventUnmarshalingError struct {
 	Type EventType
 	Err  error
 	Data []byte
+}
+
+// Unknown is an event whose type is not recognized by this client.
+// Data contains the complete event object as returned by the server.
+type Unknown struct {
+	event
+	Data json.RawMessage
+}
+
+// UnmarshalJSON preserves the complete event object for callers that need to inspect it.
+func (e *Unknown) UnmarshalJSON(data []byte) error {
+	e.event = event{Type: EventTypeUnknown, Op: "unknown"}
+	e.Data = append(e.Data[:0], data...)
+	var peeker struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(data, &peeker); err != nil {
+		return err
+	}
+	e.ID = peeker.ID
+	return nil
 }
 
 func (e EventUnmarshalingError) Error() string {
