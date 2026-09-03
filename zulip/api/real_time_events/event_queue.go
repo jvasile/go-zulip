@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/tum-zulip/go-zulip/zulip"
 	"github.com/tum-zulip/go-zulip/zulip/api/users"
@@ -283,6 +284,9 @@ func (q *eventQueue) pollEvents(ctx context.Context, events chan<- events.Event)
 				q.logger.WarnContext(ctx, "event queue stopping due to polling error", "error", err)
 				return
 			}
+			if waitAfterRateLimit(ctx, httpResp) {
+				return
+			}
 			continue
 		}
 
@@ -413,4 +417,24 @@ func shouldStopPolling(err error) bool {
 	}
 
 	return false
+}
+
+func waitAfterRateLimit(ctx context.Context, resp *http.Response) bool {
+	if resp == nil || resp.StatusCode != http.StatusTooManyRequests {
+		return false
+	}
+	delay := 5 * time.Second
+	if value := resp.Header.Get("Retry-After"); value != "" {
+		if seconds, err := time.ParseDuration(value + "s"); err == nil && seconds > 0 && seconds <= time.Minute {
+			delay = seconds
+		}
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return false
+	case <-ctx.Done():
+		return true
+	}
 }
